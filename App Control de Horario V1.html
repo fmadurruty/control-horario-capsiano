@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Horario Capsiano</title>
+
+<style>
+:root{
+  --bg:#111827;
+  --card:#1f2937;
+  --card2:#374151;
+  --text:#f3f4f6;
+  --green:#22c55e;
+  --red:#ef4444;
+  --blue:#3b82f6;
+  --orange:#f59e0b;
+}
+
+*{
+  box-sizing:border-box;
+  margin:0;
+  padding:0;
+}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:Arial,sans-serif;
+  padding:15px;
+  max-width:700px;
+  margin:auto;
+}
+
+h1{
+  text-align:center;
+  margin-bottom:15px;
+}
+
+.card{
+  background:var(--card);
+  padding:15px;
+  border-radius:15px;
+  margin-bottom:15px;
+}
+
+.info{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:10px;
+}
+
+.valor{
+  font-weight:bold;
+}
+
+button{
+  border:none;
+  border-radius:10px;
+  padding:14px;
+  cursor:pointer;
+  color:white;
+  width:100%;
+  font-size:16px;
+}
+
+.btn-start{
+  background:var(--green);
+}
+
+.btn-stop{
+  background:var(--red);
+}
+
+.btn-blue{
+  background:var(--blue);
+}
+
+.btn-delete{
+  background:var(--red);
+  width:auto;
+  padding:8px;
+}
+
+.btn-edit{
+  background:var(--blue);
+  width:auto;
+  padding:8px;
+}
+
+.stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px;
+}
+
+.stat{
+  background:var(--card2);
+  border-radius:10px;
+  text-align:center;
+  padding:10px;
+}
+
+.stat h3{
+  font-size:20px;
+}
+
+input{
+  width:100%;
+  padding:10px;
+  margin-bottom:10px;
+  border:none;
+  border-radius:10px;
+}
+
+.historial-item{
+  background:var(--card2);
+  border-radius:10px;
+  padding:10px;
+  margin-bottom:10px;
+}
+
+.acciones{
+  display:flex;
+  gap:10px;
+  margin-top:10px;
+}
+
+.estado{
+  text-align:center;
+  margin-bottom:15px;
+  font-size:18px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Control de Horario Capsiano</h1>
+
+<div class="card">
+
+<div id="estado" class="estado">
+⚪ Fuera de servicio
+</div>
+
+<div class="info">
+<span>Ingreso</span>
+<span id="ingreso" class="valor">--:--</span>
+</div>
+
+<div class="info">
+<span>Tiempo trabajado</span>
+<span id="tiempo" class="valor">0h 0m</span>
+</div>
+
+<div class="info">
+<span>Extra hoy</span>
+<span id="extraHoy" class="valor">0h 0m</span>
+</div>
+
+<button id="btnPrincipal" class="btn-start">
+INICIAR JORNADA
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Resumen</h2>
+
+<div class="stats">
+
+<div class="stat">
+<h3 id="totalExtras">0h</h3>
+<small>Extras</small>
+</div>
+
+<div class="stat">
+<h3 id="totalJornadas">0</h3>
+<small>Jornadas</small>
+</div>
+
+<div class="stat">
+<h3 id="promedioExtras">0h</h3>
+<small>Promedio</small>
+</div>
+
+</div>
+
+</div>
+
+<div class="card">
+
+<h2>Agregar jornada manual</h2>
+
+<input type="date" id="manualFecha">
+<input type="time" id="manualIngreso">
+<input type="time" id="manualSalida">
+
+<button class="btn-blue" onclick="agregarManual()">
+Agregar Jornada
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Configuración</h2>
+
+<label>Ingreso normal</label>
+<input type="time" id="cfgIngreso">
+
+<label>Salida normal</label>
+<input type="time" id="cfgSalida">
+
+<button class="btn-blue" onclick="guardarConfig()">
+Guardar Configuración
+</button>
+
+</div>
+
+<div class="card">
+
+<h2>Historial</h2>
+
+<div id="historial"></div>
+
+</div>
+
+<script>
+
+let config = JSON.parse(
+localStorage.getItem("caps_config")
+) || {
+ingreso:"08:15",
+salida:"17:30"
+};
+
+let jornadaActiva = JSON.parse(
+localStorage.getItem("caps_jornada")
+) || null;
+
+let historial = JSON.parse(
+localStorage.getItem("caps_historial")
+) || [];
+
+document.getElementById("cfgIngreso").value=config.ingreso;
+document.getElementById("cfgSalida").value=config.salida;
+
+function guardarDatos(){
+localStorage.setItem(
+"caps_historial",
+JSON.stringify(historial)
+);
+
+localStorage.setItem(
+"caps_jornada",
+JSON.stringify(jornadaActiva)
+);
+}
+
+function guardarConfig(){
+
+config.ingreso=
+document.getElementById("cfgIngreso").value;
+
+config.salida=
+document.getElementById("cfgSalida").value;
+
+localStorage.setItem(
+"caps_config",
+JSON.stringify(config)
+);
+
+alert("Configuración guardada");
+}
+
+function minutosTexto(min){
+
+let h=Math.floor(min/60);
+let m=min%60;
+
+return h+"h "+m+"m";
+}
+
+function calcularExtra(inicio,fin){
+
+let [ih,im]=config.ingreso.split(":").map(Number);
+let [sh,sm]=config.salida.split(":").map(Number);
+
+let normalInicio=ih*60+im;
+let normalSalida=sh*60+sm;
+
+let inicioMin=
+inicio.getHours()*60+
+inicio.getMinutes();
+
+let salidaMin=
+fin.getHours()*60+
+fin.getMinutes();
+
+let extra=0;
+
+if(inicioMin<normalInicio){
+extra+=normalInicio-inicioMin;
+}
+
+if(salidaMin>normalSalida){
+extra+=salidaMin-normalSalida;
+}
+
+return extra;
+}
+
+function iniciarJornada(){
+
+jornadaActiva={
+inicio:new Date().toISOString()
+};
+
+guardarDatos();
+render();
+}
+
+function finalizarJornada(){
+
+let inicio=
+new Date(jornadaActiva.inicio);
+
+let fin=
+new Date();
+
+let trabajadas=
+Math.round((fin-inicio)/60000);
+
+let extra=
+calcularExtra(inicio,fin);
+
+historial.unshift({
+fecha:inicio.toLocaleDateString(),
+ingreso:inicio.toTimeString().slice(0,5),
+salida:fin.toTimeString().slice(0,5),
+trabajadas,
+extra
+});
+
+jornadaActiva=null;
+
+guardarDatos();
+
+alert(
+"🎉 LIBERTAD CONSEGUIDA\n\nExtra hoy: "
++ minutosTexto(extra)
+);
+
+render();
+}
+
+document
+.getElementById("btnPrincipal")
+.addEventListener("click",()=>{
+
+if(jornadaActiva){
+finalizarJornada();
+}else{
+iniciarJornada();
+}
+
+});
+
+function agregarManual(){
+
+let fecha=
+document.getElementById("manualFecha").value;
+
+let ingreso=
+document.getElementById("manualIngreso").value;
+
+let salida=
+document.getElementById("manualSalida").value;
+
+if(!fecha || !ingreso || !salida){
+alert("Completar todos los campos");
+return;
+}
+
+let inicio=
+new Date(fecha+"T"+ingreso);
+
+let fin=
+new Date(fecha+"T"+salida);
+
+historial.unshift({
+
+fecha:inicio.toLocaleDateString(),
+ingreso,
+salida,
+
+trabajadas:
+Math.round((fin-inicio)/60000),
+
+extra:
+calcularExtra(inicio,fin)
+
+});
+
+guardarDatos();
+render();
+}
+
+function eliminarRegistro(i){
+
+if(!confirm("Eliminar jornada?")){
+return;
+}
+
+historial.splice(i,1);
+
+guardarDatos();
+render();
+}
+
+function editarRegistro(i){
+
+let r=historial[i];
+
+let nuevoIngreso=
+prompt("Ingreso HH:MM",r.ingreso);
+
+if(!nuevoIngreso)return;
+
+let nuevaSalida=
+prompt("Salida HH:MM",r.salida);
+
+if(!nuevaSalida)return;
+
+let partes=
+r.fecha.split("/");
+
+let fechaISO=
+partes[2]+"-"+partes[1].padStart(2,"0")+"-"+partes[0].padStart(2,"0");
+
+let ini=
+new Date(fechaISO+"T"+nuevoIngreso);
+
+let fin=
+new Date(fechaISO+"T"+nuevaSalida);
+
+historial[i]={
+
+fecha:r.fecha,
+
+ingreso:nuevoIngreso,
+
+salida:nuevaSalida,
+
+trabajadas:
+Math.round((fin-ini)/60000),
+
+extra:
+calcularExtra(ini,fin)
+
+};
+
+guardarDatos();
+render();
+}
+
+function renderHistorial(){
+
+let div=
+document.getElementById("historial");
+
+div.innerHTML="";
+
+historial.forEach((r,i)=>{
+
+div.innerHTML+=`
+
+<div class="historial-item">
+
+<b>📅 ${r.fecha}</b><br>
+
+Ingreso: ${r.ingreso}<br>
+
+Salida: ${r.salida}<br>
+
+Trabajadas:
+${minutosTexto(r.trabajadas)}<br>
+
+Extra:
+${minutosTexto(r.extra)}
+
+<div class="acciones">
+
+<button
+class="btn-edit"
+onclick="editarRegistro(${i})">
+
+✏️ Editar
+
+</button>
+
+<button
+class="btn-delete"
+onclick="eliminarRegistro(${i})">
+
+🗑️
+
+</button>
+
+</div>
+
+</div>
+
+`;
+
+});
+
+}
+
+function renderResumen(){
+
+let total=
+historial.reduce(
+(a,b)=>a+b.extra,
+0
+);
+
+document.getElementById(
+"totalExtras"
+).textContent=
+minutosTexto(total);
+
+document.getElementById(
+"totalJornadas"
+).textContent=
+historial.length;
+
+document.getElementById(
+"promedioExtras"
+).textContent=
+historial.length
+?
+minutosTexto(
+Math.round(total/historial.length)
+)
+:
+"0h";
+}
+
+function render(){
+
+if(jornadaActiva){
+
+document.getElementById(
+"estado"
+).textContent=
+"🟢 Trabajando";
+
+document.getElementById(
+"btnPrincipal"
+).textContent=
+"LIBERTAD";
+
+document.getElementById(
+"btnPrincipal"
+).className=
+"btn-stop";
+
+}else{
+
+document.getElementById(
+"estado"
+).textContent=
+"⚪ Fuera de servicio";
+
+document.getElementById(
+"btnPrincipal"
+).textContent=
+"INICIAR JORNADA";
+
+document.getElementById(
+"btnPrincipal"
+).className=
+"btn-start";
+
+document.getElementById(
+"ingreso"
+).textContent=
+"--:--";
+
+document.getElementById(
+"tiempo"
+).textContent=
+"0h 0m";
+
+document.getElementById(
+"extraHoy"
+).textContent=
+"0h 0m";
+}
+
+renderHistorial();
+renderResumen();
+}
+
+setInterval(()=>{
+
+if(!jornadaActiva){
+return;
+}
+
+let inicio=
+new Date(jornadaActiva.inicio);
+
+let ahora=
+new Date();
+
+let mins=
+Math.floor((ahora-inicio)/60000);
+
+document.getElementById(
+"ingreso"
+).textContent=
+inicio.toTimeString().slice(0,5);
+
+document.getElementById(
+"tiempo"
+).textContent=
+minutosTexto(mins);
+
+document.getElementById(
+"extraHoy"
+).textContent=
+minutosTexto(
+calcularExtra(inicio,ahora)
+);
+
+},1000);
+
+render();
+
+</script>
+
+</body>
+</html>
